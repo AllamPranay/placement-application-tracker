@@ -1,0 +1,13 @@
+# Web framework and ASGI server
+fastapi==0.162.0
+uvicorn==0.54.0
+
+# Database ORM (SQLite driver is built into Python)
+SQLAlchemy==2.1.6
+
+# Request / response validation
+pydantic==2.14.1
+
+# Testing (httpx2 is the HTTP client FastAPI's TestClient uses)
+pytest==9.1.1
+httpx2==2.16.0
