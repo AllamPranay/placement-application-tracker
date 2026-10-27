@@ -113,3 +113,22 @@ class StatusHistoryOut(BaseModel):
     to_status: Status
     changed_at: UtcDateTime
 
+
+class FunnelOut(BaseModel):
+    """How many applications ever reached each stage, and stage-to-stage conversion %."""
+
+    reached: dict[str, int]
+    applied_to_oa_pct: float
+    oa_to_interview_pct: float
+    interview_to_offer_pct: float
+
+
+class StatsOut(BaseModel):
+    """Response of GET /api/stats."""
+
+    total: int
+    active: int
+    by_status: dict[str, int]
+    funnel: FunnelOut
+    upcoming_7_days: int
+    avg_offer_ctc_lpa: float | None

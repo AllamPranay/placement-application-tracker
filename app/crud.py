@@ -6,7 +6,7 @@ CRUD = Create, Read, Update, Delete. Functions take a Session and return ORM obj
 from datetime import date, timedelta
 from typing import Literal
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.models import Application, Status, StatusHistory
@@ -115,3 +115,65 @@ def all_applications_for_export(db: Session) -> list[Application]:
     """Every application, oldest id first (for the CSV export)."""
     return list(db.scalars(select(Application).order_by(Application.id)))
 
+
+# ---------------------------------------------------------------------------
+# Stats: all numbers below are computed by the database with SQL aggregation.
+# ---------------------------------------------------------------------------
+
+# Pipeline order. "Reached Interview" also means it got past Applied and OA,
+# even if the OA step was skipped. Wishlist and Rejected are not funnel stages.
+STAGE_RANK = {Status.APPLIED: 1, Status.OA: 2, Status.INTERVIEW: 3, Status.OFFER: 4}
+ACTIVE_STATUSES = [Status.APPLIED, Status.OA, Status.INTERVIEW]
+
+
+def count_by_status(db: Session) -> dict[str, int]:
+    """SELECT status, COUNT(id) FROM applications GROUP BY status."""
+    stmt = select(Application.status, func.count(Application.id)).group_by(Application.status)
+    counts = {status.value: 0 for status in Status}  # statuses with no rows show as 0
+    counts.update({status: count for status, count in db.execute(stmt)})
+    return counts
+
+
+def funnel_reached(db: Session) -> dict[str, int]:
+    """How many applications ever reached each stage.
+
+    Step 1 (subquery): for each application, the highest stage it ever had,
+    using status_history (it also holds the current status, because a history
+    row is written on create and on every change).
+    Step 2: count applications whose best stage is at least Applied / OA / ...
+    """
+    stage_rank = case(STAGE_RANK, value=StatusHistory.to_status, else_=0)
+    best = (
+        select(StatusHistory.application_id, func.max(stage_rank).label("best_stage"))
+        .group_by(StatusHistory.application_id)
+        .subquery()
+    )
+
+    def reached(rank: int):
+        return func.coalesce(func.sum(case((best.c.best_stage >= rank, 1), else_=0)), 0)
+
+    stmt = select(
+        reached(1).label("Applied"),
+        reached(2).label("OA"),
+        reached(3).label("Interview"),
+        reached(4).label("Offer"),
+    )
+    return dict(db.execute(stmt).one()._mapping)
+
+
+def count_upcoming(db: Session, days: int = 7, today: date | None = None) -> int:
+    """SELECT COUNT(id) ... WHERE next_step_date BETWEEN today AND today + days."""
+    today = today or date.today()
+    stmt = (
+        select(func.count(Application.id))
+        .where(Application.next_step_date.between(today, today + timedelta(days=days)))
+        .where(Application.status != Status.REJECTED)
+    )
+    return db.scalar(stmt)
+
+
+def average_offer_ctc(db: Session) -> float | None:
+    """SELECT AVG(ctc_lpa) FROM applications WHERE status = 'Offer' (NULLs ignored)."""
+    stmt = select(func.avg(Application.ctc_lpa)).where(Application.status == Status.OFFER)
+    average = db.scalar(stmt)
+    return round(average, 2) if average is not None else None
