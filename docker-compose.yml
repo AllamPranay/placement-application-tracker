@@ -1,0 +1,19 @@
+# One command to run the app:  docker compose up --build
+# Then open http://localhost:8000
+services:
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: sqlite:////data/tracker.db
+    volumes:
+      - tracker-data:/data # keeps the database when the container is recreated
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  tracker-data:
