@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Placement Application Tracker</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%232a78d6'/><path d='M9 22V10h3v12zm5.5 0V14h3v8zM20 22v-5h3v5z' fill='white'/></svg>">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <!-- ===== Header: title + live counts (filled in by app.js) ===== -->
+  <header class="site-header">
+    <div class="container header-inner">
+      <div>
+        <h1>Placement Application Tracker</h1>
+        <p class="subtitle" id="header-counts">Loading…</p>
+      </div>
+      <a class="button ghost" href="/docs" target="_blank" rel="noopener">API docs</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- ===== Stat cards ===== -->
+    <section class="stat-grid" aria-label="Summary">
+      <article class="card stat">
+        <p class="stat-label">Total applications</p>
+        <p class="stat-value" id="stat-total">–</p>
+        <p class="stat-hint">All statuses</p>
+      </article>
+      <article class="card stat">
+        <p class="stat-label">Active</p>
+        <p class="stat-value" id="stat-active">–</p>
+        <p class="stat-hint">Applied, OA or Interview</p>
+      </article>
+      <article class="card stat">
+        <p class="stat-label">Offers</p>
+        <p class="stat-value" id="stat-offers">–</p>
+        <p class="stat-hint" id="stat-offer-ctc">Average CTC: –</p>
+      </article>
+      <article class="card stat">
+        <p class="stat-label">Next 7 days</p>
+        <p class="stat-value" id="stat-upcoming">–</p>
+        <p class="stat-hint">OAs, interviews, deadlines</p>
+      </article>
+    </section>
+
+    <div class="layout">
+      <!-- ===== Add / edit form ===== -->
+      <section class="card form-card" aria-labelledby="form-title">
+        <h2 id="form-title">Add application</h2>
+        <!-- novalidate: we show our own friendly messages instead of browser pop-ups -->
+        <form id="application-form" novalidate>
+          <div class="field">
+            <label for="company">Company <span class="req">*</span></label>
+            <input id="company" name="company" maxlength="120" autocomplete="off" aria-describedby="error-company">
+            <p class="field-error" id="error-company"></p>
+          </div>
+          <div class="field">
+            <label for="role">Role <span class="req">*</span></label>
+            <input id="role" name="role" maxlength="120" autocomplete="off" aria-describedby="error-role">
+            <p class="field-error" id="error-role"></p>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="location">Location</label>
+              <input id="location" name="location" maxlength="120">
+            </div>
+            <div class="field">
+              <label for="ctc_lpa">CTC (LPA)</label>
+              <input id="ctc_lpa" name="ctc_lpa" type="number" min="0" step="0.01" inputmode="decimal" aria-describedby="error-ctc_lpa">
+              <p class="field-error" id="error-ctc_lpa"></p>
+            </div>
+          </div>
+          <div class="field">
+            <label for="status">Status</label>
+            <select id="status" name="status"></select>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="applied_on">Applied on</label>
+              <input id="applied_on" name="applied_on" type="date">
+            </div>
+            <div class="field">
+              <label for="next_step_date">Next step</label>
+              <input id="next_step_date" name="next_step_date" type="date" aria-describedby="error-next_step_date">
+              <p class="field-error" id="error-next_step_date"></p>
+            </div>
+          </div>
+          <div class="field">
+            <label for="job_link">Job link</label>
+            <input id="job_link" name="job_link" type="url" placeholder="https://…" aria-describedby="error-job_link">
+            <p class="field-error" id="error-job_link"></p>
+          </div>
+          <div class="field">
+            <label for="notes">Notes</label>
+            <textarea id="notes" name="notes" rows="3" maxlength="2000" placeholder="Referral, rounds, contacts…"></textarea>
+          </div>
+          <p class="form-error" id="form-error" role="alert"></p>
+          <div class="form-actions">
+            <button type="submit" class="button primary" id="submit-button">Add application</button>
+            <button type="button" class="button ghost" id="cancel-edit" hidden>Cancel</button>
+          </div>
+        </form>
+      </section>
+
+      <div class="main-column">
+        <!-- ===== Funnel chart: plain divs whose width is set from the data ===== -->
+        <section class="card" aria-labelledby="funnel-title">
+          <div class="card-head">
+            <h2 id="funnel-title">Hiring funnel</h2>
+            <p class="card-sub">Applications that ever reached each stage</p>
+          </div>
+          <div id="funnel" class="funnel"></div>
+        </section>
+
+        <!-- ===== Applications table ===== -->
+        <section class="card" aria-labelledby="table-title">
+          <div class="card-head">
+            <h2 id="table-title">Applications</h2>
+            <a class="button secondary" href="/api/export.csv" download>Export CSV</a>
+          </div>
+          <div class="toolbar">
+            <input id="search" type="search" placeholder="Search company or role…" aria-label="Search company or role">
+            <select id="filter-status" aria-label="Filter by status">
+              <option value="">All statuses</option>
+            </select>
+            <select id="sort" aria-label="Sort by">
+              <option value="newest">Newest first</option>
+              <option value="next_step_date">Next step (soonest)</option>
+              <option value="applied_on">Applied on (recent)</option>
+              <option value="company">Company (A–Z)</option>
+            </select>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <caption class="visually-hidden">Your applications</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Company &amp; role</th>
+                  <th scope="col">Status</th>
+                  <th scope="col" class="num">CTC</th>
+                  <th scope="col">Applied</th>
+                  <th scope="col">Next step</th>
+                  <th scope="col"><span class="visually-hidden">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody id="applications-body"></tbody>
+            </table>
+          </div>
+          <p class="empty" id="empty-message" hidden></p>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <!-- ===== History dialog (native <dialog>, opened with showModal()) ===== -->
+  <dialog id="history-dialog" aria-labelledby="history-title">
+    <div class="dialog-head">
+      <h2 id="history-title">Status history</h2>
+      <form method="dialog"><button class="button ghost" aria-label="Close">Close</button></form>
+    </div>
+    <p class="card-sub" id="history-subtitle"></p>
+    <ol class="timeline" id="history-list"></ol>
+  </dialog>
+
+  <!-- Small pop-up message for success / error feedback -->
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
